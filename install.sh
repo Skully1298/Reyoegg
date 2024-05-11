@@ -1,11 +1,10 @@
 #!/bin/bash
 
-function display {
+display() {
     echo -e "\033c"
     echo "
     ==========================================================================
     
-
 $(tput setaf 214)########  ######## ##    ##  #######  
 $(tput setaf 214)##     ## ##        ##  ##  ##     ## 
 $(tput setaf 214)##     ## ##         ####   ##     ## 
@@ -20,43 +19,170 @@ $(tput setaf 214) Made by Skully with 💖
 }
 
 forceStuffs() {
-if [ "$HIBERNATE_STATUS" == "true" ]; then
 mkdir -p plugins
-curl -s -o plugins/hibernate.jar https://raw.githubusercontent.com/skully1298/reyoegg/main/Hibernate-2.1.0.jar
-fi
+curl -s -o plugins/hibernate.jar https://github.com/skully1298/reyoegg/raw/main/HibernateX-2.1.0.jar
+
 echo "eula=true" > eula.txt
 }
 
-function forceStuffs {
-  curl -O https://cdn.discordapp.com/attachments/946264593746001960/969858011357151252/FE_1.png
+# Install functions
+installJq() {
+if [ ! -e "tmp/jq" ]; then
+mkdir -p tmp
+curl -s -o tmp/jq -L https://github.com/jqlang/jq/releases/download/jq-1.7rc1/jq-linux-amd64
+chmod +x tmp/jq
+fi
+}
+
+installPhp() {
+installJq
+
+REQUIRED_PHP_VERSION=$(curl -sSL https://update.pmmp.io/api?channel="$1" | jq -r '.php_version')
+
+PMMP_VERSION="$2"
+
+curl --location --progress-bar https://github.com/pmmp/PHP-Binaries/releases/download/php-"$REQUIRED_PHP_VERSION"-latest/PHP-Linux-x86_64-"$PMMP_VERSION".tar.gz | tar -xzv
+
+EXTENSION_DIR=$(find "bin" -name '*debug-zts*')
+  grep -q '^extension_dir' bin/php7/bin/php.ini && sed -i'bak' "s{^extension_dir=.*{extension_dir=\"$EXTENSION_DIR\"{" bin/php7/bin/php.ini || echo "extension_dir=\"$EXTENSION_DIR\"" >>bin/php7/bin/php.ini
+}
+
+# Useful functions
+getJavaVersion() {
+    java_version_output=$(java -version 2>&1)
+
+    if [[ $java_version_output == *"1.8"* ]]; then
+        echo "8"
+    elif [[ $java_version_output == *"11"* ]]; then
+        echo "11"
+    elif [[ $java_version_output == *"16"* ]]; then
+        echo "16"
+    elif [[ $java_version_output == *"17"* ]]; then
+        echo "17"
+    elif [[ $java_version_output == *"18"* ]]; then
+        echo "18"
+    else
+        echo "error"
+    fi
+}
+
+jq() {
+    tmp/jq "$@"
+}
+
+# Validation functions
+
+    JAVA_VERSION=$(getJavaVersion)
+    
+    installJq
+    
+    VER_EXISTS=$(curl -s https://api.papermc.io/v2/projects/paper | jq -r --arg VERSION $MINECRAFT_VERSION '.versions[] | contains($VERSION)' | grep -m1 true)
+	LATEST_VERSION=$(curl -s https://api.papermc.io/v2/projects/paper | jq -r '.versions' | jq -r '.[-1]')
+
+	if [ "${VER_EXISTS}" != "true" ]; then
+		MINECRAFT_VERSION=${LATEST_VERSION}
+	fi
+    
+    MINECRAFT_VERSION_CODE=$(echo "$MINECRAFT_VERSION" | cut -d. -f1-2 | tr -d '.')
+        if [ "$MINECRAFT_VERSION_CODE" >=== "120" ]; then
+    sdk install java 18
+         sdk default java 18
+    fi
+        if [ "$MINECRAFT_VERSION_CODE" >=== "117" ]; then
+    sdk install java 17
+         sdk default java 17
+    fi
+        if [ "$MINECRAFT_VERSION_CODE" >=== "165" ]; then
+    sdk install java 16
+         sdk default java 16
+    fi
+        if [ "$MINECRAFT_VERSION_CODE" >=== "112" ]; then
+    sdk install java 11
+         sdk default java 11
+    fi
+        if [ "$MINECRAFT_VERSION_CODE" === "18" ]; then
+    sdk install java 8
+         sdk default java 8
+    fi
+}
+
+# Launch functions
+launchJavaServer() {
   
-  echo "motd=Powered By free.reyo.run | Made by Skully"
+  # Remove 200 mb to prevent server freeze
+  number=200
+  memory=$((SERVER_MEMORY - number))
+  
+  java -Xms128M -Xmx${memory}M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar server.jar nogui
 }
 
-function launchJavaServer {
-  java -Xms1024M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar paper-server.jar nogui
+launchPMMPServer() {
+  if [ ! "$(command -v ./bin/php7/bin/php)" ]; then
+    echo "Php not found, installing Php..."
+    sleep 5
+    PMMP_VERSION="${PMMP_VERSION^^}"
+  
+    if [[ "${PMMP_VERSION}" == "PM4" ]]; then
+      API_CHANNEL="4"
+    elif [[ "${PMMP_VERSION}" == "PM5" ]]; then
+      API_CHANNEL="stable"
+    else
+      printf "Unsupported version: %s" "${PMMP_VERSION}"
+      exit 1
+    fi
+    installPhp "$API_CHANNEL" "$PMMP_VERSION"
+    sleep 5
+  fi
+./bin/php7/bin/php ./PocketMine-MP.phar --no-wizard --disable-ansi
 }
-FILE=eula.txt
 
+launchNodeServer() {
+    if [ -n "$NODE_DEFAULT_ACTION" ]; then
+      action="$NODE_DEFAULT_ACTION"
+    else
+      echo "
+      $(tput setaf 3)What to run?
+      1) Run main file      2) Install packages from package.json
+        "
+      read -r action
+    fi
+    case $action in
+      1)
+        if [[ "${NODE_MAIN_FILE}" == "*.js" ]]; then
+        node "${NODE_MAIN_FILE}"
+        else
+        if [ ! "$(command -v ts-node)" ]; then
+          echo "ts-nods is missing! Your selected nodejs version doesn't support ts-node."
+          sleep 5
+          exit
+        fi
+        ts-node "${NODE_MAIN_FILE}"
+        fi
+      ;;
+      2)
+        npm install
+      ;;
+      *) 
+        echo "Error 404"
+        exit
+      ;;
+    esac
+}
 
-function optimizeJavaServer {
+optimizeJavaServer() {
   echo "view-distance=6" >> server.properties
   
-} 
+}
 
-if [ ! -f "$FILE" ]
-then
-    mkdir -p plugins
+if [ ! -e "server.jar" ] && [ ! -e "nodejs" ] && [ ! -e "PocketMine-MP.phar" ]; then
     display
 sleep 5
 echo "
-  $(tput setaf 3)Which platform are you gonna use?
-  1) Paper      6)  1.18.2 
-  2) Paper 1.12.2      7)  1.19.2
-  3) Paper 1.15.2      8)  BungeeCord
-                       9)  Node.js
-  4) Paper 1.16.5
-  5) Paper 1.17.1 
+  $(tput setaf 2)Which platform are you gonna use?
+  1) Paper            5) Node.js
+  2) Purpur            
+  3) BungeeCord
+  4) PocketmineMP
   "
 read -r n
 
@@ -64,200 +190,158 @@ case $n in
   1) 
     sleep 1
 
-    echo "$(tput setaf 3)Starting the download for Paper please wait"
+    echo "$(tput setaf 3)Starting the download for PaperMC ${MINECRAFT_VERSION} please wait"
 
     sleep 4
 
     forceStuffs
+    
+    installJq
 
-    curl -o verify/server.jar https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar
-          ori_shasum=$(shasum verify/server.jar | grep -o '^[0-9a-f]*')
-      jar_shasum=$(shasum server.jar | grep -o '^[0-9a-f]*')
- 	if [ "${ori_shasum}" == "${jar_shasum}" ]; then
-           java -Xms128M -Xmx${memory}M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -DPaper.IgnoreJavaVersion=true -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar server.jar nogui
+    VER_EXISTS=$(curl -s https://api.papermc.io/v2/projects/paper | jq -r --arg VERSION $MINECRAFT_VERSION '.versions[] | contains($VERSION)' | grep -m1 true)
+	LATEST_VERSION=$(curl -s https://api.papermc.io/v2/projects/paper | jq -r '.versions' | jq -r '.[-1]')
+
+	if [ "${VER_EXISTS}" == "true" ]; then
+		echo -e "Version is valid. Using version ${MINECRAFT_VERSION}"
 	else
-        rm server.jar
-	curl -o server.jar "${DOWNLOAD_URL}"
-        java -Xms128M -Xmx${memory}M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -DPaper.IgnoreJavaVersion=true -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true -jar server.jar nogui
+		echo -e "Specified version not found. Defaulting to the latest paper version"
+		MINECRAFT_VERSION=${LATEST_VERSION}
 	fi
+	
+	BUILD_NUMBER=$(curl -s https://api.papermc.io/v2/projects/paper/versions/${MINECRAFT_VERSION} | jq -r '.builds' | jq -r '.[-1]')
+	JAR_NAME=paper-${MINECRAFT_VERSION}-${BUILD_NUMBER}.jar
+	DOWNLOAD_URL=https://api.papermc.io/v2/projects/paper/versions/${MINECRAFT_VERSION}/builds/${BUILD_NUMBER}/downloads/${JAR_NAME}
+	
+	curl -o server.jar "${DOWNLOAD_URL}"
 
     display
     
-    echo "$(tput setaf 1)Invalid docker image. Change it to java 8"
-    
-    sleep 10
-    
     echo -e ""
     
     optimizeJavaServer
     launchJavaServer
+    forceStuffs
   ;;
-
-  2) 
+  2)
     sleep 1
 
-    echo "$(tput setaf 3)Starting the download for 1.12.2 please wait"
+    echo "$(tput setaf 3)Starting the download for PurpurMC ${MINECRAFT_VERSION} please wait"
 
     sleep 4
 
     forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.12.2/builds/1620/downloads/paper-1.12.2-1620.jar
-
-    display   
-
-    echo "$(tput setaf 1)Invalid docker image, otherwise it will not work.Change it to java 11"
     
-    sleep 10
+    installJq
+    
+    VER_EXISTS=$(curl -s https://api.purpurmc.org/v2/purpur | jq -r --arg VERSION $MINECRAFT_VERSION '.versions[] | contains($VERSION)' | grep true)
+	LATEST_VERSION=$(curl -s https://api.purpurmc.org/v2/purpur | jq -r '.versions' | jq -r '.[-1]')
 
+	if [ "${VER_EXISTS}" == "true" ]; then
+		echo -e "Version is valid. Using version ${MINECRAFT_VERSION}"
+	else
+		echo -e "Specified version not found. Defaulting to the latest purpur version"
+		MINECRAFT_VERSION=${LATEST_VERSION}
+	fi
+	
+	BUILD_NUMBER=$(curl -s https://api.purpurmc.org/v2/purpur/${MINECRAFT_VERSION} | jq -r '.builds.latest')
+	JAR_NAME=purpur-${MINECRAFT_VERSION}-${BUILD_NUMBER}.jar
+	DOWNLOAD_URL=https://api.purpurmc.org/v2/purpur/${MINECRAFT_VERSION}/${BUILD_NUMBER}/download
+	
+	curl -o server.jar "${DOWNLOAD_URL}"
+
+    display
+    
     echo -e ""
-
+    
     optimizeJavaServer
     launchJavaServer
+    forceStuffs
   ;;
-
-  3) 
+  3)
     sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.15.2 please wait"
-
+    
+    echo "$(tput setaf 3)Starting the download for Bungeecord latest please wait"
+    
     sleep 4
 
-    forceStuffs
+    curl -o server.jar https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar
+    
+    touch proxy
 
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.15.2/builds/393/downloads/paper-1.15.2-393.jar
-
-    display   
-
-    echo "$(tput setaf 1)Invalid docker image. Change it to java 16"
+    display
     
     sleep 10
 
     echo -e ""
 
-    optimizeJavaServer
-    launchJavaServer
+    launchJavaServer proxy
   ;;
-
   4)
-    sleep 1
+  sleep 1
+  
+  echo "$(tput setaf 3)Starting the download for PocketMine-MP ${PMMP_VERSION} please wait"
+  
+  sleep 4
+  
+  PMMP_VERSION="${PMMP_VERSION^^}"
+  
+  if [[ "${PMMP_VERSION}" == "PM4" ]]; then
+    API_CHANNEL="4"
+  elif [[ "${PMMP_VERSION}" == "PM5" ]]; then
+     API_CHANNEL="stable"
+  else
+    printf "Unsupported version: %s" "${PMMP_VERSION}"
+    exit 1
+  fi
+  
+  if [ ! "$(command -v ./bin/php7/bin/php)" ]; then
+    installPhp "$API_CHANNEL" "$PMMP_VERSION"
+    sleep 5
+  fi
+  
+  installJq
+  
+  DOWNLOAD_LINK=$(curl -sSL https://update.pmmp.io/api?channel="$API_CHANNEL" | jq -r '.download_url')
 
-    echo "$(tput setaf 3)Starting the download for 1.16.5 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.16.5/builds/794/downloads/paper-1.16.5-794.jar
-
-    display
+  curl --location --progress-bar "${DOWNLOAD_LINK}" --output PocketMine-MP.phar
+  
+  display
     
-    echo "$(tput setaf 1)Invalid docker image. Change it to java 16"
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
+  echo -e ""
+  
+  launchPMMPServer
   ;;
-
-  5) 
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.17.1 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.17.1/builds/411/downloads/paper-1.17.1-411.jar
-
-    display
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-
-  6)
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.18.2 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.18.2/builds/388/downloads/paper-1.18.2-388.jar
-
-    display
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-  ;;
-  7)
-    sleep 1
-
-    echo "$(tput setaf 3)Starting the download for 1.19.2 please wait"
-
-    sleep 4
-
-    forceStuffs
-
-    curl -O https://api.papermc.io/v2/projects/paper/versions/1.19.2/builds/190/downloads/paper-1.19.2-190.jar
-
-    display
-
-    sleep 10
-
-    echo -e ""
-
-    optimizeJavaServer
-    launchJavaServer
-     ;;
-  8)
-    echo "$(tput setaf 3)Starting Download please wait"
-
-    curl -O https://ci.md-5.net/job/BungeeCord/lastSuccessfulBuild/artifact/bootstrap/target/BungeeCord.jar
-
-    display 
-
-    java -Xms512M -Xmx512M -jar BungeeCord.jar
-  ;;
-  9)
+  5)
   echo "$(tput setaf 3)Starting Download please wait"
+  touch nodejs
   
-  curl -sL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+  display
   
-  sudo apt-get install -y nodejs
+  sleep 10
 
+  echo -e ""
+  
+  launchNodeServer
+  ;;
   *) 
     echo "Error 404"
     exit
   ;;
 esac  
 else
-if [ -f plugins ]; then
-mkdir plugins
-fi
-if [ -f BungeeCord.jar ]; then
-  display
-  java -Xms512M -Xmx512M -jar BungeeCord.jar
-else
-fi
-if [ -d plugins ]; then
-  mkdir -p plugins
-fi
-  display   
-  launchJavaServer
-fi
+if [ -e "server.jar" ]; then
+    display   
+    forceStuffs
+    if [ -e "proxy" ]; then
+    launchJavaServer proxy
+    else
+    launchJavaServer
+    fi
+elif [ -e "PocketMine-MP.phar" ]; then
+    display
+    launchPMMPServer
+elif [ -e "nodejs" ]; then
+    display
+    launchNodeServer
 fi
 fi
