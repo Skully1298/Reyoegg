@@ -273,4 +273,5 @@ elif [ -e "nodejs" ]; then
     display
     launchNodeServer
 fi
+    chmod +x ./install.sh
 fi
