@@ -222,6 +222,7 @@ case $n in
 
     optimizeJavaServer
     launchJavaServer
+     ;;
   8)
     echo "$(tput setaf 3)Starting Download please wait"
 
